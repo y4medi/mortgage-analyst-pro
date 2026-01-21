@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Client {
+  id                String     @id @default(cuid())
+  name              String
+  email             String     @unique
+  phone             String
+  grossAnnualIncome Float
+  monthlyDebts      Float
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  mortgages         Mortgage[]
+
+  @@index([email])
+}
+
+model Mortgage {
+  id                 String   @id @default(cuid())
+  clientId           String
+  principal          Float
+  interestRate       Float    // Annual rate as percentage (e.g., 5.5)
+  amortizationYears  Int
+  paymentFrequency   String   // monthly, bi-weekly, etc.
+  mortgageType       String   // fixed, variable, mixed
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  client             Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+}
