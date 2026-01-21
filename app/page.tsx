@@ -1,4 +1,48 @@
+'use client';
+
+import { useState } from 'react';
+import MortgageCalculatorForm from '@/components/forms/MortgageCalculatorForm';
+import AffordabilityResults from '@/components/dashboard/AffordabilityResults';
+import { calculateAffordability, performStressTest } from '@/lib/math';
+import type { AffordabilityResult, StressTestResult, PaymentFrequency } from '@/types';
+
 export default function Home() {
+  const [results, setResults] = useState<{
+    affordability: AffordabilityResult;
+    stressTest: StressTestResult;
+  } | null>(null);
+
+  const handleCalculate = (formData: {
+    principal: number;
+    interestRate: number;
+    amortizationYears: number;
+    frequency: PaymentFrequency;
+    grossAnnualIncome: number;
+    monthlyDebts: number;
+  }) => {
+    // Calculate affordability
+    const affordability = calculateAffordability(
+      formData.principal,
+      formData.interestRate,
+      formData.amortizationYears,
+      formData.frequency,
+      formData.grossAnnualIncome,
+      formData.monthlyDebts
+    );
+
+    // Perform stress test
+    const stressTest = performStressTest(
+      formData.principal,
+      formData.interestRate,
+      formData.amortizationYears,
+      formData.frequency,
+      formData.grossAnnualIncome,
+      formData.monthlyDebts
+    );
+
+    setResults({ affordability, stressTest });
+  };
+
   return (
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="max-w-7xl mx-auto">
@@ -11,59 +55,40 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              Client Management
-            </h2>
-            <p className="text-gray-600">
-              Manage client information, income, and debt obligations.
-            </p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Calculator Form */}
+          <div>
+            <MortgageCalculatorForm onCalculate={handleCalculate} />
           </div>
 
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              Affordability Analysis
-            </h2>
-            <p className="text-gray-600">
-              Calculate GDS/TDS ratios and mortgage affordability.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              Stress Testing
-            </h2>
-            <p className="text-gray-600">
-              Test mortgages against qualifying rates (+2%).
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              Sensitivity Analysis
-            </h2>
-            <p className="text-gray-600">
-              Visualize payment scenarios across rate ranges.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              AI Document Processing
-            </h2>
-            <p className="text-gray-600">
-              Automated extraction of income and debt data.
-            </p>
-          </div>
-
-          <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-3">
-              Portfolio Dashboard
-            </h2>
-            <p className="text-gray-600">
-              Interactive charts and real-time analytics.
-            </p>
+          {/* Results Display */}
+          <div>
+            {results ? (
+              <AffordabilityResults
+                affordability={results.affordability}
+                stressTest={results.stressTest}
+              />
+            ) : (
+              <div className="bg-white rounded-lg shadow-md p-6 h-full flex items-center justify-center">
+                <div className="text-center text-gray-500">
+                  <svg
+                    className="mx-auto h-12 w-12 text-gray-400 mb-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                    />
+                  </svg>
+                  <p className="text-lg font-medium">Enter mortgage details</p>
+                  <p className="text-sm mt-2">Fill out the form to see affordability analysis</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
