@@ -3,13 +3,26 @@
 import { useState } from 'react';
 import MortgageCalculatorForm from '@/components/forms/MortgageCalculatorForm';
 import AffordabilityResults from '@/components/dashboard/AffordabilityResults';
-import { calculateAffordability, performStressTest } from '@/lib/math';
-import type { AffordabilityResult, StressTestResult, PaymentFrequency } from '@/types';
+import SensitivityChart from '@/components/charts/SensitivityChart';
+import AmortizationChart from '@/components/charts/AmortizationChart';
+import AmortizationComparisonChart from '@/components/charts/AmortizationComparisonChart';
+import {
+  calculateAffordability,
+  performStressTest,
+  generateSensitivityAnalysis,
+  generateYearlyAmortizationSummary,
+  compareAmortizationPeriods
+} from '@/lib/math';
+import type { AffordabilityResult, StressTestResult, PaymentFrequency, SensitivityDataPoint } from '@/types';
 
 export default function Home() {
   const [results, setResults] = useState<{
     affordability: AffordabilityResult;
     stressTest: StressTestResult;
+    sensitivityData: SensitivityDataPoint[];
+    amortizationData: any[];
+    comparisonData: any[];
+    formData: any;
   } | null>(null);
 
   const handleCalculate = (formData: {
@@ -40,7 +53,37 @@ export default function Home() {
       formData.monthlyDebts
     );
 
-    setResults({ affordability, stressTest });
+    // Generate sensitivity analysis data
+    const sensitivityData = generateSensitivityAnalysis(
+      formData.principal,
+      formData.interestRate,
+      formData.amortizationYears,
+      formData.frequency
+    );
+
+    // Generate amortization schedule
+    const amortizationData = generateYearlyAmortizationSummary(
+      formData.principal,
+      formData.interestRate,
+      formData.amortizationYears,
+      formData.frequency
+    );
+
+    // Compare different amortization periods
+    const comparisonData = compareAmortizationPeriods(
+      formData.principal,
+      formData.interestRate,
+      formData.frequency
+    );
+
+    setResults({
+      affordability,
+      stressTest,
+      sensitivityData,
+      amortizationData,
+      comparisonData,
+      formData
+    });
   };
 
   return (
@@ -55,7 +98,7 @@ export default function Home() {
           </p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
           {/* Calculator Form */}
           <div>
             <MortgageCalculatorForm onCalculate={handleCalculate} />
@@ -91,6 +134,18 @@ export default function Home() {
             )}
           </div>
         </div>
+
+        {/* Charts Section */}
+        {results && (
+          <div className="space-y-8">
+            <SensitivityChart
+              data={results.sensitivityData}
+              baseRate={results.formData.interestRate}
+            />
+            <AmortizationChart data={results.amortizationData} />
+            <AmortizationComparisonChart data={results.comparisonData} />
+          </div>
+        )}
       </div>
     </main>
   );
