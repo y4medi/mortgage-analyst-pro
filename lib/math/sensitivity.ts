@@ -61,6 +61,10 @@ export function generateSensitivityAnalysis(
 /**
  * Generate amortization schedule showing principal/interest breakdown
  * per payment over the entire mortgage term
+ * 
+ * Note: Uses rounded intermediate calculations to prevent floating-point
+ * precision errors from accumulating over many payments. The final payment
+ * is adjusted to ensure the balance is exactly 0.
  */
 export function generateAmortizationSchedule(
   principal: number,
@@ -82,29 +86,54 @@ export function generateAmortizationSchedule(
   const periodicRate = getPeriodicRate(annualRate, paymentsPerYear);
   const totalPayments = amortizationYears * paymentsPerYear;
 
-  let balance = principal;
+  // Round payment to cents to prevent propagation of tiny errors
+  const roundedPayment = Math.round(payment * 100) / 100;
+
+  // Round balance to cents to prevent error accumulation
+  let balance = Math.round(principal * 100) / 100;
   let paymentDate = new Date(startDate);
 
   // Calculate days between payments
   const daysPerPayment = Math.floor(365 / paymentsPerYear);
 
   for (let i = 1; i <= totalPayments; i++) {
-    // Interest portion
+    const isLastPayment = i === totalPayments;
+
+    // Interest portion - round to cents
     const interestPayment = balance * periodicRate;
+    const roundedInterest = Math.round(interestPayment * 100) / 100;
 
     // Principal portion
-    const principalPayment = payment - interestPayment;
+    let principalPayment = roundedPayment - roundedInterest;
 
-    // Update balance
-    balance = Math.max(0, balance - principalPayment);
+    // Adjust final payment to ensure balance = 0 exactly
+    // This prevents floating-point errors from leaving a small remaining balance
+    if (isLastPayment) {
+      principalPayment = balance; // Pay remaining balance exactly
+      const adjustedPayment = roundedInterest + principalPayment;
+
+      schedule.push({
+        paymentNumber: i,
+        paymentDate: new Date(paymentDate),
+        payment: Math.round(adjustedPayment * 100) / 100,
+        principal: Math.round(principalPayment * 100) / 100,
+        interest: roundedInterest,
+        balance: 0 // Guaranteed to be 0
+      });
+      break;
+    }
+
+    // Update balance with rounded values to prevent error accumulation
+    // Round after each calculation to prevent tiny errors from compounding
+    balance = Math.max(0, Math.round((balance - principalPayment) * 100) / 100);
 
     schedule.push({
       paymentNumber: i,
       paymentDate: new Date(paymentDate),
-      payment: Math.round(payment * 100) / 100,
+      payment: roundedPayment,
       principal: Math.round(principalPayment * 100) / 100,
-      interest: Math.round(interestPayment * 100) / 100,
-      balance: Math.round(balance * 100) / 100
+      interest: roundedInterest,
+      balance: balance
     });
 
     // Move to next payment date

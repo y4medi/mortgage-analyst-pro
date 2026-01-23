@@ -51,7 +51,6 @@ export async function POST(request: NextRequest) {
       success: true,
       data: analysis
     });
-
   } catch (error) {
     console.error('Error in analyze-document API:', error);
 
@@ -60,7 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: 'Failed to analyze document',
-        details: errorMessage
+        details: errorMessage,
       },
       { status: 500 }
     );

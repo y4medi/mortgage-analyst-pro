@@ -1,22 +1,30 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentAnalysis } from '@/types';
+import 'server-only';
 
-// Initialize the Anthropic client
-// API key should be in environment variable ANTHROPIC_API_KEY
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY || ''
-});
+
 
 /**
  * Analyze a document to extract mortgage-relevant information
  * using Claude AI
  */
+// ✅ 新增：请求时才创建 client
+function getAnthropicClient() {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+  }
+
+  return new Anthropic({ apiKey });
+}
 export async function analyzeDocument(
   documentText: string
 ): Promise<DocumentAnalysis> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY environment variable is not set');
-  }
+  const anthropic = getAnthropicClient();
+  // if (!process.env.ANTHROPIC_API_KEY) {
+  //   throw new Error('ANTHROPIC_API_KEY environment variable is not set');
+  // }
 
   const prompt = `You are a mortgage document analyzer. Extract the following information from the provided document:
 
@@ -43,7 +51,7 @@ Provide ONLY the JSON response, no additional text.`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 1024,
       messages: [
         {
@@ -94,6 +102,7 @@ Provide ONLY the JSON response, no additional text.`;
  * Extract income information specifically from a document
  */
 export async function extractIncome(documentText: string): Promise<number | null> {
+  const anthropic = getAnthropicClient();
   const prompt = `Extract the annual gross income from the following document.
 Look for salary, wages, employment income, or total income.
 Respond with ONLY the numeric value (no currency symbols or commas), or "null" if not found.
@@ -103,7 +112,7 @@ ${documentText}`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 100,
       messages: [
         {
@@ -132,6 +141,7 @@ ${documentText}`;
  * Extract debt obligations from a document
  */
 export async function extractDebts(documentText: string): Promise<number[]> {
+  const anthropic = getAnthropicClient();
   const prompt = `Extract all monthly debt obligations from the following document.
 Look for: credit card payments, car loans, student loans, personal loans, etc.
 Respond with a JSON array of numeric values (monthly payment amounts), or an empty array if none found.
@@ -143,7 +153,7 @@ Respond with ONLY a JSON array like: [500, 300, 150] or []`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 200,
       messages: [
         {
@@ -168,6 +178,7 @@ Respond with ONLY a JSON array like: [500, 300, 150] or []`;
  * Summarize a mortgage document in plain language
  */
 export async function summarizeDocument(documentText: string): Promise<string> {
+  const anthropic = getAnthropicClient();
   const prompt = `Provide a concise summary of the key mortgage-related information in this document.
 Focus on: income, debts, mortgage amounts, interest rates, and affordability concerns.
 
@@ -178,7 +189,7 @@ Provide a 2-3 sentence summary.`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+      model: 'claude-sonnet-4-5',
       max_tokens: 300,
       messages: [
         {

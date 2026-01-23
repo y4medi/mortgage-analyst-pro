@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import MortgageCalculatorForm from '@/components/forms/MortgageCalculatorForm';
+import MortgageCalculatorForm, { type MortgageFormData } from '@/components/forms/MortgageCalculatorForm';
 import AffordabilityResults from '@/components/dashboard/AffordabilityResults';
 import AIPanel from '@/components/dashboard/AIPanel';
 import ClientSidebar from '@/components/dashboard/ClientSidebar';
@@ -44,12 +44,32 @@ export default function Home() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [refreshClients, setRefreshClients] = useState(0);
+  const [calculatorPrefill, setCalculatorPrefill] = useState<Partial<MortgageFormData> | undefined>(undefined);
+
+  const sumDebts = (debts?: number[]) =>
+    Array.isArray(debts) ? debts.reduce((acc, v) => acc + (Number.isFinite(v) ? v : 0), 0) : 0;
 
   const handleAIDataExtracted = (data: DocumentAnalysis) => {
-    // Auto-fill calculator form with extracted data
-    if (data.extractedIncome || data.extractedDebts) {
-      // You can trigger form update here if needed
-      console.log('AI Data extracted:', data);
+    const prefill: Partial<MortgageFormData> = {};
+
+    if (data.identifiedMortgageTerms?.principal !== undefined) {
+      prefill.principal = data.identifiedMortgageTerms.principal;
+    }
+    if (data.identifiedMortgageTerms?.rate !== undefined) {
+      prefill.interestRate = data.identifiedMortgageTerms.rate;
+    }
+    if (data.identifiedMortgageTerms?.amortization !== undefined) {
+      prefill.amortizationYears = data.identifiedMortgageTerms.amortization;
+    }
+    if (data.extractedIncome !== undefined) {
+      prefill.grossAnnualIncome = data.extractedIncome;
+    }
+    if (data.extractedDebts && data.extractedDebts.length > 0) {
+      prefill.monthlyDebts = sumDebts(data.extractedDebts);
+    }
+
+    if (Object.keys(prefill).length > 0) {
+      setCalculatorPrefill(prefill);
     }
   };
 
@@ -251,7 +271,7 @@ export default function Home() {
               </div>
             </div>
 
-            <MortgageCalculatorForm onCalculate={handleCalculate} />
+            <MortgageCalculatorForm onCalculate={handleCalculate} prefillData={calculatorPrefill} />
 
             {/* Results Display */}
             {results ? (

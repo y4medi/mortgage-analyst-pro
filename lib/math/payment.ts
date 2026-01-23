@@ -24,6 +24,12 @@ export function getPaymentsPerYear(frequency: PaymentFrequency): number {
 
 /**
  * Calculate periodic interest rate from annual rate
+ * 
+ * Canadian mortgages compound semi-annually, not monthly.
+ * Formula: (1 + r/2)^(2/n) - 1
+ * 
+ * Note: Result is rounded to 10 decimal places to prevent tiny
+ * floating-point precision errors from propagating through calculations.
  */
 export function getPeriodicRate(annualRate: number, paymentsPerYear: number): number {
   // Convert percentage to decimal
@@ -34,7 +40,10 @@ export function getPeriodicRate(annualRate: number, paymentsPerYear: number): nu
   const semiAnnualRate = rateDecimal / 2;
   const periodicRate = Math.pow(1 + semiAnnualRate, 2 / paymentsPerYear) - 1;
 
-  return periodicRate;
+  // Round to 10 decimal places to prevent precision errors from propagating
+  // This is still more precise than needed (cents = 2 decimals) but prevents
+  // tiny errors from accumulating in intermediate calculations
+  return Math.round(periodicRate * 1e10) / 1e10;
 }
 
 /**

@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { PaymentFrequency } from '@/types';
 
-interface MortgageFormData {
+export interface MortgageFormData {
   principal: number;
   interestRate: number;
   amortizationYears: number;
@@ -14,17 +14,38 @@ interface MortgageFormData {
 
 interface Props {
   onCalculate: (data: MortgageFormData) => void;
+  prefillData?: Partial<MortgageFormData>;
 }
 
-export default function MortgageCalculatorForm({ onCalculate }: Props) {
+const DEFAULT_FORM_DATA: MortgageFormData = {
+  principal: 400000,
+  interestRate: 5.5,
+  amortizationYears: 25,
+  frequency: 'monthly',
+  grossAnnualIncome: 80000,
+  monthlyDebts: 500
+};
+
+function toFiniteNumber(value: string): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export default function MortgageCalculatorForm({ onCalculate, prefillData }: Props) {
   const [formData, setFormData] = useState<MortgageFormData>({
-    principal: 400000,
-    interestRate: 5.5,
-    amortizationYears: 25,
-    frequency: 'monthly',
-    grossAnnualIncome: 80000,
-    monthlyDebts: 500
+    ...DEFAULT_FORM_DATA,
   });
+
+  // Merge prefilled values into the current form state (only when provided).
+  useEffect(() => {
+    if (!prefillData) return;
+    setFormData(prev => ({
+      ...prev,
+      ...Object.fromEntries(
+        Object.entries(prefillData).filter(([, v]) => v !== undefined)
+      ),
+    }) as MortgageFormData);
+  }, [prefillData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,7 +72,7 @@ export default function MortgageCalculatorForm({ onCalculate }: Props) {
           <input
             type="number"
             value={formData.principal}
-            onChange={(e) => handleChange('principal', parseFloat(e.target.value))}
+            onChange={(e) => handleChange('principal', toFiniteNumber(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="1000"
@@ -67,7 +88,7 @@ export default function MortgageCalculatorForm({ onCalculate }: Props) {
           <input
             type="number"
             value={formData.interestRate}
-            onChange={(e) => handleChange('interestRate', parseFloat(e.target.value))}
+            onChange={(e) => handleChange('interestRate', toFiniteNumber(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             max="20"
@@ -122,7 +143,7 @@ export default function MortgageCalculatorForm({ onCalculate }: Props) {
           <input
             type="number"
             value={formData.grossAnnualIncome}
-            onChange={(e) => handleChange('grossAnnualIncome', parseFloat(e.target.value))}
+            onChange={(e) => handleChange('grossAnnualIncome', toFiniteNumber(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="1000"
@@ -138,7 +159,7 @@ export default function MortgageCalculatorForm({ onCalculate }: Props) {
           <input
             type="number"
             value={formData.monthlyDebts}
-            onChange={(e) => handleChange('monthlyDebts', parseFloat(e.target.value))}
+            onChange={(e) => handleChange('monthlyDebts', toFiniteNumber(e.target.value))}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="50"
