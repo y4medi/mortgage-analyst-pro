@@ -1,0 +1,23 @@
+*** SYNTHETIC SAMPLE DOCUMENT - FOR DEMO PURPOSES ONLY ***
+*** Fictional person, fictional lenders, made-up numbers. Not a real credit report. ***
+
+BROKER INTAKE - CREDIT AND DEBT SUMMARY
+Applicant: Sample Borrower A
+Prepared: 2026-11-10
+
+Credit score (self-reported, fictional): 742
+
+LIABILITIES
+  Visa card (Example Bank) - balance $4,200.00 - minimum monthly payment $126.00
+  Auto loan (Example Auto Finance) - balance $18,400.00 - payment $385.00 per month
+  Student loan (fictional servicer) - balance $9,750.00 - payment $210.00 per month
+
+  Total of monthly debt payments: $721.00
+
+MORTGAGE REQUEST
+  Purchase price: $600,000.00
+  Down payment: $120,000.00 (20%)
+  Requested mortgage amount: $480,000.00
+  Contract rate: 4.79% (5-year fixed)
+  Amortization: 25 years
+  Payment frequency: monthly

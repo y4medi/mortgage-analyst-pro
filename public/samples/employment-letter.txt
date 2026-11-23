@@ -1,0 +1,31 @@
+*** SYNTHETIC SAMPLE DOCUMENT - FOR DEMO PURPOSES ONLY ***
+*** Fictional person and fictional employer. Not a real record. ***
+
+Northwind Example Logistics Ltd. (fictional company)
+100 Sample Avenue, Toronto, ON  A1A 1A1
+Tel: 416-555-0199
+
+November 3, 2026
+
+To Whom It May Concern,
+
+RE: Confirmation of Employment - Sample Borrower A
+
+This letter confirms that Sample Borrower A has been employed by Northwind
+Example Logistics Ltd. on a full-time, permanent basis since March 4, 2019.
+Their current position is Senior Operations Analyst.
+
+Employment status: Full-time, permanent (probation completed)
+Guaranteed hours: 37.5 hours per week
+Annual base salary: $96,500.00
+Bonus: discretionary, not guaranteed (not included above)
+
+Sample Borrower A is in good standing and there are no plans to change
+their employment status.
+
+Please contact the undersigned with any questions.
+
+Sincerely,
+
+Sample HR Manager (fictional)
+Human Resources, Northwind Example Logistics Ltd.

@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { analyzeDocument } from '@/services/ai/document-analyzer';
+import { extractWithRules } from '@/services/ai/rule-based-extractor';
+import { isAIConfigured } from '@/lib/runtime-mode';
+import type { AnalysisMode } from '@/types';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // 60 seconds for AI processing
 
 /**
  * POST /api/ai/analyze-document
- * Analyzes a document using Claude AI to extract mortgage-relevant information
+ * Analyzes a document using Claude AI to extract mortgage-relevant information.
+ * Without ANTHROPIC_API_KEY it falls back to rule-based extraction and
+ * flags the response with `mode: "demo"`.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,19 +41,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check for API key
-    if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json(
-        { error: 'AI service not configured. Set ANTHROPIC_API_KEY environment variable.' },
-        { status: 500 }
-      );
+    // Demo mode: no API key -> deterministic rule-based extraction
+    if (!isAIConfigured()) {
+      return NextResponse.json({
+        success: true,
+        mode: 'demo' satisfies AnalysisMode,
+        data: extractWithRules(documentText)
+      });
     }
 
-    // Analyze document
+    // Analyze document with Claude
     const analysis = await analyzeDocument(documentText);
 
     return NextResponse.json({
       success: true,
+      mode: 'ai' satisfies AnalysisMode,
       data: analysis
     });
   } catch (error) {
@@ -79,6 +86,7 @@ export async function GET() {
       documentText: 'string (required) - The document text to analyze'
     },
     response: {
+      mode: '"ai" (Claude) | "demo" (rule-based, no API key configured)',
       extractedIncome: 'number | null',
       extractedDebts: 'number[]',
       identifiedMortgageTerms: {
@@ -87,7 +95,8 @@ export async function GET() {
         amortization: 'number | null'
       },
       confidence: 'number (0-1)',
-      rawText: 'string'
+      rawText: 'string',
+      evidence: 'Record<string, string> (demo mode: source line for each value)'
     }
   });
 }

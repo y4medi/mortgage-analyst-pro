@@ -1,0 +1,22 @@
+*** SYNTHETIC SAMPLE DOCUMENT - FOR DEMO PURPOSES ONLY ***
+*** Fictional person and fictional employer. Not a real record. ***
+
+NORTHWIND EXAMPLE LOGISTICS LTD. (fictional) - EARNINGS STATEMENT
+
+Employee: Sample Borrower A           Employee ID: DEMO-0001
+Pay period: 2026-10-18 to 2026-10-31  Pay date: 2026-11-06
+Pay frequency: Bi-weekly
+
+EARNINGS
+  Regular hours (75.0 h @ $49.49)          $3,711.54
+  Gross pay (this period):                 $3,711.54
+  Gross pay (year-to-date):               $77,942.34
+
+DEDUCTIONS (this period)
+  Federal tax withheld:                      $468.20
+  Provincial tax withheld:                   $231.75
+  CPP contributions:                         $208.17
+  EI premiums:                                $60.87
+  Group benefits:                             $42.10
+
+  Net pay:                                 $2,700.45

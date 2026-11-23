@@ -2,13 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { DocumentAnalysis } from '@/types';
 import 'server-only';
 
+/** Claude model used for document analysis (override with ANTHROPIC_MODEL). */
+export const CLAUDE_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
 
-
-/**
- * Analyze a document to extract mortgage-relevant information
- * using Claude AI
- */
-// ✅ 新增：请求时才创建 client
+// Create the client per request so a missing key fails at call time, not import time.
 function getAnthropicClient() {
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
@@ -18,13 +15,15 @@ function getAnthropicClient() {
 
   return new Anthropic({ apiKey });
 }
+
+/**
+ * Analyze a document to extract mortgage-relevant information
+ * using Claude AI
+ */
 export async function analyzeDocument(
   documentText: string
 ): Promise<DocumentAnalysis> {
   const anthropic = getAnthropicClient();
-  // if (!process.env.ANTHROPIC_API_KEY) {
-  //   throw new Error('ANTHROPIC_API_KEY environment variable is not set');
-  // }
 
   const prompt = `You are a mortgage document analyzer. Extract the following information from the provided document:
 
@@ -51,7 +50,7 @@ Provide ONLY the JSON response, no additional text.`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: CLAUDE_MODEL,
       max_tokens: 1024,
       messages: [
         {
@@ -112,7 +111,7 @@ ${documentText}`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: CLAUDE_MODEL,
       max_tokens: 100,
       messages: [
         {
@@ -153,7 +152,7 @@ Respond with ONLY a JSON array like: [500, 300, 150] or []`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: CLAUDE_MODEL,
       max_tokens: 200,
       messages: [
         {
@@ -189,7 +188,7 @@ Provide a 2-3 sentence summary.`;
 
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: CLAUDE_MODEL,
       max_tokens: 300,
       messages: [
         {

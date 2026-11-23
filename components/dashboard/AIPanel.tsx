@@ -1,17 +1,53 @@
 'use client';
 
 import { useState } from 'react';
-import type { DocumentAnalysis } from '@/types';
+import type { AnalysisMode, DocumentAnalysis } from '@/types';
 
 interface Props {
   onDataExtracted: (data: DocumentAnalysis) => void;
 }
+
+// Synthetic sample documents served from /public/samples
+const SAMPLE_DOCUMENTS = [
+  { file: 'employment-letter.txt', label: 'Employment letter (synthetic)' },
+  { file: 'pay-stub.txt', label: 'Pay stub (synthetic)' },
+  { file: 'credit-debt-summary.txt', label: 'Credit & debt summary (synthetic)' }
+];
+
+const EVIDENCE_LABELS: Record<string, string> = {
+  income: 'Income',
+  debts: 'Debts',
+  principal: 'Mortgage amount',
+  rate: 'Rate',
+  amortization: 'Amortization'
+};
 
 export default function AIPanel({ onDataExtracted }: Props) {
   const [documentText, setDocumentText] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
+  const [mode, setMode] = useState<AnalysisMode | null>(null);
+  const [applied, setApplied] = useState(false);
+
+  const handleLoadSample = async (file: string) => {
+    if (!file) return;
+    setError(null);
+    setResult(null);
+    try {
+      const response = await fetch(`/samples/${file}`);
+      if (!response.ok) throw new Error('Could not load sample document');
+      setDocumentText(await response.text());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load sample document');
+    }
+  };
+
+  const handleApply = () => {
+    if (!result) return;
+    onDataExtracted(result);
+    setApplied(true);
+  };
 
   const handleAnalyze = async () => {
     if (!documentText.trim()) {
@@ -21,6 +57,7 @@ export default function AIPanel({ onDataExtracted }: Props) {
 
     setIsProcessing(true);
     setError(null);
+    setApplied(false);
 
     try {
       const response = await fetch('/api/ai/analyze-document', {
@@ -37,8 +74,10 @@ export default function AIPanel({ onDataExtracted }: Props) {
         throw new Error(data.error || 'Failed to analyze document');
       }
 
+      // Human-in-the-loop: show the extraction for review; the broker
+      // applies it to the calculator explicitly.
       setResult(data.data);
-      onDataExtracted(data.data);
+      setMode(data.mode ?? null);
 
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -50,6 +89,8 @@ export default function AIPanel({ onDataExtracted }: Props) {
   const handleClear = () => {
     setDocumentText('');
     setResult(null);
+    setMode(null);
+    setApplied(false);
     setError(null);
   };
 
@@ -67,14 +108,31 @@ export default function AIPanel({ onDataExtracted }: Props) {
       </div>
 
       <p className="text-sm text-gray-600 mb-4">
-        Paste document text below to automatically extract income, debts, and mortgage information.
+        Paste document text below to extract income, debts, and mortgage information, then review
+        the values before applying them to the calculator.
       </p>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Document Text
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Document Text
+            </label>
+            <select
+              value=""
+              onChange={(e) => handleLoadSample(e.target.value)}
+              disabled={isProcessing}
+              aria-label="Load sample document"
+              className="text-sm px-2 py-1 border border-gray-300 rounded-md text-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            >
+              <option value="">Load sample document…</option>
+              {SAMPLE_DOCUMENTS.map((d) => (
+                <option key={d.file} value={d.file}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <textarea
             value={documentText}
             onChange={(e) => setDocumentText(e.target.value)}
@@ -92,7 +150,12 @@ export default function AIPanel({ onDataExtracted }: Props) {
 
         {result && (
           <div className="bg-green-50 border border-green-200 rounded-md p-4">
-            <h3 className="text-sm font-semibold text-green-800 mb-2">✓ Extraction Complete</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-green-800">✓ Extraction Complete — review before applying</h3>
+              <span className="text-xs text-green-700">
+                {mode === 'demo' ? 'Rule-based parser (demo mode)' : 'Claude AI'}
+              </span>
+            </div>
             <div className="space-y-2 text-sm text-green-700">
               {result.extractedIncome && (
                 <p>
@@ -118,10 +181,36 @@ export default function AIPanel({ onDataExtracted }: Props) {
                   {result.identifiedMortgageTerms.rate}%
                 </p>
               )}
+              {result.identifiedMortgageTerms?.amortization && (
+                <p>
+                  <span className="font-medium">Amortization:</span>{' '}
+                  {result.identifiedMortgageTerms.amortization} years
+                </p>
+              )}
+              {result.evidence && Object.keys(result.evidence).length > 0 && (
+                <details className="text-xs text-green-800">
+                  <summary className="cursor-pointer">Show source lines</summary>
+                  <ul className="mt-1 space-y-1">
+                    {Object.entries(result.evidence).map(([field, line]) => (
+                      <li key={field}>
+                        <span className="font-medium">{EVIDENCE_LABELS[field] ?? field}:</span>{' '}
+                        <span className="font-mono">{line}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               <p className="text-xs mt-2">
                 Confidence: {(result.confidence * 100).toFixed(0)}%
               </p>
             </div>
+            <button
+              onClick={handleApply}
+              disabled={applied}
+              className="mt-3 w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 text-sm font-medium disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {applied ? '✓ Applied to calculator' : 'Apply to calculator'}
+            </button>
           </div>
         )}
 
