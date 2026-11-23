@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { isDatabaseConfigured } from '@/lib/runtime-mode';
 import { createDemoSeed } from './demo-seed';
 
@@ -75,41 +75,48 @@ export interface MortgageRepository {
 class PrismaMortgageRepository implements MortgageRepository {
   readonly mode = 'database' as const;
 
-  constructor(private readonly prisma: PrismaClient) {}
+  // @prisma/client is imported lazily so demo mode never loads it (the Prisma
+  // runtime reads .env files into process.env as a side effect).
+  private clientPromise?: Promise<PrismaClient>;
 
-  listClients() {
-    return this.prisma.client.findMany({
+  private db(): Promise<PrismaClient> {
+    this.clientPromise ??= import('@prisma/client').then(m => new m.PrismaClient());
+    return this.clientPromise;
+  }
+
+  async listClients() {
+    return (await this.db()).client.findMany({
       include: { mortgages: { orderBy: { createdAt: 'desc' } } },
       orderBy: { createdAt: 'desc' }
     });
   }
 
-  findClientById(id: string) {
-    return this.prisma.client.findUnique({ where: { id } });
+  async findClientById(id: string) {
+    return (await this.db()).client.findUnique({ where: { id } });
   }
 
-  findClientByEmail(email: string) {
-    return this.prisma.client.findUnique({ where: { email } });
+  async findClientByEmail(email: string) {
+    return (await this.db()).client.findUnique({ where: { email } });
   }
 
-  createClient(data: ClientInput) {
-    return this.prisma.client.create({ data });
+  async createClient(data: ClientInput) {
+    return (await this.db()).client.create({ data });
   }
 
-  updateClient(id: string, data: Partial<ClientInput>) {
-    return this.prisma.client.update({ where: { id }, data });
+  async updateClient(id: string, data: Partial<ClientInput>) {
+    return (await this.db()).client.update({ where: { id }, data });
   }
 
   async deleteClient(id: string) {
-    await this.prisma.client.delete({ where: { id } });
+    await (await this.db()).client.delete({ where: { id } });
   }
 
-  createMortgage(data: MortgageInput) {
-    return this.prisma.mortgage.create({ data, include: { client: true } });
+  async createMortgage(data: MortgageInput) {
+    return (await this.db()).mortgage.create({ data, include: { client: true } });
   }
 
-  listMortgages(clientId?: string) {
-    return this.prisma.mortgage.findMany({
+  async listMortgages(clientId?: string) {
+    return (await this.db()).mortgage.findMany({
       where: clientId ? { clientId } : undefined,
       include: { client: true },
       orderBy: { createdAt: 'desc' }
@@ -217,7 +224,7 @@ const globalForRepo = globalThis as unknown as {
 
 export function getRepository(): MortgageRepository {
   if (isDatabaseConfigured()) {
-    globalForRepo.__prismaRepository ??= new PrismaMortgageRepository(new PrismaClient());
+    globalForRepo.__prismaRepository ??= new PrismaMortgageRepository();
     return globalForRepo.__prismaRepository;
   }
   globalForRepo.__demoRepository ??= new InMemoryMortgageRepository();
