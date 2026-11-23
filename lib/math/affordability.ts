@@ -1,13 +1,51 @@
 import type {
   AffordabilityResult,
+  BindingConstraint,
   PaymentFrequency,
-  PaymentCalculationParams
+  PaymentCalculationParams,
+  QualificationPreset
 } from '@/types';
-import { calculatePayment, convertToMonthlyPayment } from './payment';
+import { calculatePayment, convertToMonthlyPayment, calculateMaxMortgage } from './payment';
 
-// Standard Canadian mortgage qualifying ratios
-export const DEFAULT_GDS_THRESHOLD = 32; // 32%
-export const DEFAULT_TDS_THRESHOLD = 40; // 40%
+/**
+ * Qualification ratio presets (GDS / TDS maximums, in percent).
+ *
+ * - conventional: common lender guideline for uninsured (20%+ down) mortgages.
+ * - insured: CMHC limits for high-ratio insured mortgages (39% GDS / 44% TDS).
+ *
+ * Individual lenders and insurers (Sagen, Canada Guaranty) may apply
+ * different limits or credit-score tiers; these are reference defaults only.
+ */
+export const QUALIFICATION_PRESETS: Record<
+  QualificationPreset,
+  { label: string; gdsThreshold: number; tdsThreshold: number }
+> = {
+  conventional: { label: 'Conventional', gdsThreshold: 32, tdsThreshold: 40 },
+  insured: { label: 'CMHC insured', gdsThreshold: 39, tdsThreshold: 44 }
+};
+
+// Standard Canadian mortgage qualifying ratios (conventional preset)
+export const DEFAULT_GDS_THRESHOLD = QUALIFICATION_PRESETS.conventional.gdsThreshold; // 32%
+export const DEFAULT_TDS_THRESHOLD = QUALIFICATION_PRESETS.conventional.tdsThreshold; // 40%
+
+/** Share of condo/strata fees counted in GDS/TDS (CMHC guideline: 50%). */
+export const CONDO_FEE_GDS_SHARE = 0.5;
+
+export function getQualificationThresholds(preset: QualificationPreset = 'conventional') {
+  return QUALIFICATION_PRESETS[preset] ?? QUALIFICATION_PRESETS.conventional;
+}
+
+/**
+ * Non-mortgage housing costs counted in GDS:
+ * property tax + heating + 50% of condo fees (all monthly).
+ */
+export function calculateOtherHousingCosts(
+  propertyTax: number = 0,
+  heatingCost: number = 0,
+  condoFees: number = 0
+): number {
+  return propertyTax + heatingCost + condoFees * CONDO_FEE_GDS_SHARE;
+}
 
 /**
  * Calculate Gross Debt Service (GDS) Ratio
@@ -65,10 +103,9 @@ export function calculateAffordability(
   const monthlyPayment = convertToMonthlyPayment(payment, frequency);
   const grossMonthlyIncome = grossAnnualIncome / 12;
 
-  // Calculate total monthly housing costs
-  // Include 50% of condo fees as per CMHC guidelines
+  // Total monthly housing costs (50% of condo fees per CMHC guidelines)
   const monthlyHousingCosts =
-    monthlyPayment + propertyTax + heatingCost + (condoFees * 0.5);
+    monthlyPayment + calculateOtherHousingCosts(propertyTax, heatingCost, condoFees);
 
   // Calculate ratios
   const gdsRatio = calculateGDS(monthlyHousingCosts, grossMonthlyIncome);
@@ -89,8 +126,15 @@ export function calculateAffordability(
 }
 
 /**
- * Calculate maximum affordable mortgage amount based on income and debts
- * This works backwards from the ratios to determine max borrowing capacity
+ * Calculate maximum affordable mortgage amount based on income and debts.
+ * Works backwards from BOTH ratios and uses whichever is more restrictive:
+ *
+ *   max housing by GDS = GDS% × gross monthly income
+ *   max housing by TDS = TDS% × gross monthly income − other monthly debts
+ *   max mortgage payment = min(GDS, TDS housing) − (tax + heat + 50% condo)
+ *
+ * The resulting monthly budget is converted back to a principal for the given
+ * payment frequency (Canadian semi-annual compounding).
  */
 export function calculateMaxAffordableMortgage(
   grossAnnualIncome: number,
@@ -101,61 +145,37 @@ export function calculateMaxAffordableMortgage(
   heatingCost: number = 0,
   condoFees: number = 0,
   gdsThreshold: number = DEFAULT_GDS_THRESHOLD,
-  tdsThreshold: number = DEFAULT_TDS_THRESHOLD
-): { maxByGDS: number; maxByTDS: number; maxMortgage: number } {
+  tdsThreshold: number = DEFAULT_TDS_THRESHOLD,
+  frequency: PaymentFrequency = 'monthly'
+): {
+  maxByGDS: number;
+  maxByTDS: number;
+  maxMortgage: number;
+  maxMonthlyPayment: number;
+  bindingConstraint: BindingConstraint;
+} {
   const grossMonthlyIncome = grossAnnualIncome / 12;
+  const otherHousingCosts = calculateOtherHousingCosts(propertyTax, heatingCost, condoFees);
 
-  // Calculate max housing costs by GDS
   const maxHousingCostsByGDS = (gdsThreshold / 100) * grossMonthlyIncome;
+  const maxHousingCostsByTDS = (tdsThreshold / 100) * grossMonthlyIncome - monthlyDebts;
 
-  // Calculate max total debt by TDS
-  const maxTotalDebtByTDS = (tdsThreshold / 100) * grossMonthlyIncome;
-  const maxHousingCostsByTDS = maxTotalDebtByTDS - monthlyDebts;
+  const maxPaymentByGDS = Math.max(0, maxHousingCostsByGDS - otherHousingCosts);
+  const maxPaymentByTDS = Math.max(0, maxHousingCostsByTDS - otherHousingCosts);
+  const maxMonthlyPayment = Math.min(maxPaymentByGDS, maxPaymentByTDS);
 
-  // Use the more restrictive limit
-  const maxHousingCosts = Math.min(maxHousingCostsByGDS, maxHousingCostsByTDS);
+  const toPrincipal = (monthlyBudget: number) =>
+    calculateMaxMortgage(monthlyBudget, annualRate, amortizationYears, frequency);
 
-  // Subtract other housing costs to get max mortgage payment
-  const otherHousingCosts = propertyTax + heatingCost + (condoFees * 0.5);
-  const maxMonthlyPayment = Math.max(0, maxHousingCosts - otherHousingCosts);
-
-  // Convert to mortgage principal using payment formula (inverted)
-  // For simplicity, use monthly frequency here
-  const paymentsPerYear = 12;
-  const rateDecimal = annualRate / 100;
-  const semiAnnualRate = rateDecimal / 2;
-  const periodicRate = Math.pow(1 + semiAnnualRate, 2 / paymentsPerYear) - 1;
-  const totalPayments = amortizationYears * paymentsPerYear;
-
-  let maxMortgage = 0;
-  if (annualRate === 0) {
-    maxMortgage = maxMonthlyPayment * totalPayments;
-  } else {
-    const numerator = Math.pow(1 + periodicRate, totalPayments) - 1;
-    const denominator = periodicRate * Math.pow(1 + periodicRate, totalPayments);
-    maxMortgage = maxMonthlyPayment * (numerator / denominator);
-  }
-
-  // Calculate individual maxes for comparison
-  const maxPaymentByGDS = maxHousingCostsByGDS - otherHousingCosts;
-  const maxPaymentByTDS = maxHousingCostsByTDS - otherHousingCosts;
-
-  let maxByGDS = 0;
-  let maxByTDS = 0;
-
-  if (annualRate === 0) {
-    maxByGDS = maxPaymentByGDS * totalPayments;
-    maxByTDS = maxPaymentByTDS * totalPayments;
-  } else {
-    const numerator = Math.pow(1 + periodicRate, totalPayments) - 1;
-    const denominator = periodicRate * Math.pow(1 + periodicRate, totalPayments);
-    maxByGDS = maxPaymentByGDS * (numerator / denominator);
-    maxByTDS = maxPaymentByTDS * (numerator / denominator);
-  }
+  const maxByGDS = toPrincipal(maxPaymentByGDS);
+  const maxByTDS = toPrincipal(maxPaymentByTDS);
+  const maxMortgage = Math.min(maxByGDS, maxByTDS);
 
   return {
-    maxByGDS: Math.max(0, Math.round(maxByGDS * 100) / 100),
-    maxByTDS: Math.max(0, Math.round(maxByTDS * 100) / 100),
-    maxMortgage: Math.max(0, Math.round(maxMortgage * 100) / 100)
+    maxByGDS: Math.round(maxByGDS * 100) / 100,
+    maxByTDS: Math.round(maxByTDS * 100) / 100,
+    maxMortgage: Math.round(maxMortgage * 100) / 100,
+    maxMonthlyPayment: Math.round(maxMonthlyPayment * 100) / 100,
+    bindingConstraint: maxPaymentByGDS <= maxPaymentByTDS ? 'GDS' : 'TDS'
   };
 }

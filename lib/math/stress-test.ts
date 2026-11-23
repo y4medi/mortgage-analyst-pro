@@ -1,19 +1,29 @@
 import type {
   StressTestResult,
-  PaymentFrequency,
-  AffordabilityResult
+  PaymentFrequency
 } from '@/types';
-import { calculatePayment, convertToMonthlyPayment, calculateMaxMortgage } from './payment';
-import { calculateAffordability } from './affordability';
+import { calculatePayment, convertToMonthlyPayment } from './payment';
+import {
+  calculateAffordability,
+  calculateMaxAffordableMortgage,
+  DEFAULT_GDS_THRESHOLD,
+  DEFAULT_TDS_THRESHOLD
+} from './affordability';
 
 /**
- * Canadian mortgage stress test rate increase
+ * Canadian mortgage stress test (minimum qualifying rate, "MQR").
  * Borrowers must qualify at the greater of:
- * - Contract rate + 2%
- * - 5.25% (Bank of Canada minimum qualifying rate)
+ *   - contract rate + 2%, or
+ *   - the 5.25% floor.
+ *
+ * Uninsured mortgages: OSFI Guideline B-20 (floor of 5.25% since June 2021).
+ * Insured mortgages: the Department of Finance federal MQR uses the same
+ * "greater of contract + 2% or 5.25%" rule.
+ * This is the single source of truth for the floor; update it here if the
+ * regulators change it.
  */
-export const STRESS_TEST_RATE_INCREASE = 2.0; // 2%
-export const MINIMUM_QUALIFYING_RATE = 5.25; // 5.25%
+export const STRESS_TEST_RATE_INCREASE = 2.0; // percentage points over contract rate
+export const MINIMUM_QUALIFYING_RATE = 5.25; // OSFI B-20 / federal MQR floor, in %
 
 /**
  * Calculate the stress test qualifying rate
@@ -25,7 +35,9 @@ export function getStressTestRate(contractRate: number): number {
 
 /**
  * Perform a complete mortgage stress test
- * Tests whether the borrower can afford the mortgage at the stressed rate
+ * Tests whether the borrower can afford the mortgage at the stressed rate,
+ * and how much they could borrow at the contract vs stressed rate using the
+ * same GDS + TDS logic as the affordability check (whichever binds first).
  */
 export function performStressTest(
   principal: number,
@@ -36,7 +48,9 @@ export function performStressTest(
   monthlyDebts: number,
   propertyTax: number = 0,
   heatingCost: number = 0,
-  condoFees: number = 0
+  condoFees: number = 0,
+  gdsThreshold: number = DEFAULT_GDS_THRESHOLD,
+  tdsThreshold: number = DEFAULT_TDS_THRESHOLD
 ): StressTestResult {
   const stressRate = getStressTestRate(contractRate);
 
@@ -68,44 +82,39 @@ export function performStressTest(
     monthlyDebts,
     propertyTax,
     heatingCost,
-    condoFees
+    condoFees,
+    gdsThreshold,
+    tdsThreshold
   );
 
-  // Calculate maximum mortgage at each rate
-  // (How much could they borrow if we work backwards from their income)
-  const grossMonthlyIncome = grossAnnualIncome / 12;
+  // Maximum mortgage at each rate, working backwards from income with
+  // both GDS and TDS (the more restrictive one binds).
+  const maxAt = (rate: number) =>
+    calculateMaxAffordableMortgage(
+      grossAnnualIncome,
+      monthlyDebts,
+      rate,
+      amortizationYears,
+      propertyTax,
+      heatingCost,
+      condoFees,
+      gdsThreshold,
+      tdsThreshold,
+      frequency
+    );
 
-  // Use TDS as the binding constraint (typically 40%)
-  const maxTotalDebt = 0.4 * grossMonthlyIncome;
-  const maxHousingCosts = maxTotalDebt - monthlyDebts;
-  const otherHousingCosts = propertyTax + heatingCost + (condoFees * 0.5);
-  const maxPaymentAtContract = Math.max(0, maxHousingCosts - otherHousingCosts);
-
-  const maxMortgageAtContract = calculateMaxMortgage(
-    maxPaymentAtContract,
-    contractRate,
-    amortizationYears,
-    frequency
-  );
-
-  const maxMortgageAtStress = calculateMaxMortgage(
-    maxPaymentAtContract,
-    stressRate,
-    amortizationYears,
-    frequency
-  );
-
-  // Determine if they pass the stress test
-  const passesStressTest = affordabilityAtStress.isAffordable;
+  const atContract = maxAt(contractRate);
+  const atStress = maxAt(stressRate);
 
   return {
     contractRate: Math.round(contractRate * 100) / 100,
     stressRate: Math.round(stressRate * 100) / 100,
     monthlyPaymentAtContract: Math.round(monthlyPaymentAtContract * 100) / 100,
     monthlyPaymentAtStress: Math.round(monthlyPaymentAtStress * 100) / 100,
-    maxMortgageAtContract: Math.round(maxMortgageAtContract * 100) / 100,
-    maxMortgageAtStress: Math.round(maxMortgageAtStress * 100) / 100,
-    passesStressTest,
+    maxMortgageAtContract: atContract.maxMortgage,
+    maxMortgageAtStress: atStress.maxMortgage,
+    bindingConstraint: atStress.bindingConstraint,
+    passesStressTest: affordabilityAtStress.isAffordable,
     affordabilityAtStress
   };
 }
@@ -137,9 +146,11 @@ export function qualifiesUnderStressTest(
   monthlyDebts: number,
   propertyTax: number = 0,
   heatingCost: number = 0,
-  condoFees: number = 0
+  condoFees: number = 0,
+  gdsThreshold: number = DEFAULT_GDS_THRESHOLD,
+  tdsThreshold: number = DEFAULT_TDS_THRESHOLD
 ): boolean {
-  const result = performStressTest(
+  return performStressTest(
     principal,
     contractRate,
     amortizationYears,
@@ -148,8 +159,8 @@ export function qualifiesUnderStressTest(
     monthlyDebts,
     propertyTax,
     heatingCost,
-    condoFees
-  );
-
-  return result.passesStressTest;
+    condoFees,
+    gdsThreshold,
+    tdsThreshold
+  ).passesStressTest;
 }

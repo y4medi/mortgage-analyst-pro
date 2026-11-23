@@ -33,6 +33,12 @@ export type PaymentFrequency =
 
 export type MortgageType = 'fixed' | 'variable' | 'mixed';
 
+// Qualification ratio preset: conventional (32/40) or CMHC insured (39/44)
+export type QualificationPreset = 'conventional' | 'insured';
+
+// Which ratio limits the maximum mortgage
+export type BindingConstraint = 'GDS' | 'TDS';
+
 // Affordability calculation results
 export interface AffordabilityResult {
   gdsRatio: number; // Gross Debt Service ratio
@@ -40,18 +46,19 @@ export interface AffordabilityResult {
   monthlyHousingCosts: number;
   monthlyPayment: number;
   isAffordable: boolean;
-  gdsThreshold: number; // Typically 32%
-  tdsThreshold: number; // Typically 40%
+  gdsThreshold: number; // 32% conventional, 39% CMHC insured
+  tdsThreshold: number; // 40% conventional, 44% CMHC insured
 }
 
 // Stress test results
 export interface StressTestResult {
   contractRate: number;
-  stressRate: number; // Contract rate + 2%
+  stressRate: number; // Greater of contract rate + 2% or the 5.25% floor
   monthlyPaymentAtContract: number;
   monthlyPaymentAtStress: number;
   maxMortgageAtContract: number;
   maxMortgageAtStress: number;
+  bindingConstraint: BindingConstraint; // Ratio that limits the max mortgage at the stress rate
   passesStressTest: boolean;
   affordabilityAtStress: AffordabilityResult;
 }
@@ -85,7 +92,12 @@ export interface DocumentAnalysis {
   };
   confidence: number;
   rawText: string;
+  // Field-level evidence (the text each value was taken from), for human review
+  evidence?: Record<string, string>;
 }
+
+// How a document was analyzed: Claude API, or deterministic rules in demo mode
+export type AnalysisMode = 'ai' | 'demo';
 
 // Payment calculation parameters
 export interface PaymentCalculationParams {

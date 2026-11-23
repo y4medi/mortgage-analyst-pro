@@ -58,39 +58,29 @@ export function getPeriodicRate(annualRate: number, paymentsPerYear: number): nu
 export function calculatePayment(params: PaymentCalculationParams): number {
   const { principal, annualRate, amortizationYears, frequency } = params;
 
-  // Handle zero interest rate edge case
-  if (annualRate === 0) {
-    const paymentsPerYear = getPaymentsPerYear(frequency);
-    const totalPayments = amortizationYears * paymentsPerYear;
-    return principal / totalPayments;
+  // Accelerated payments are defined relative to the monthly payment:
+  // accelerated bi-weekly = monthly / 2, accelerated weekly = monthly / 4.
+  // Handle them first so the zero-rate path follows the same rule.
+  if (frequency === 'accelerated-bi-weekly' || frequency === 'accelerated-weekly') {
+    const monthlyPayment = calculatePayment({ ...params, frequency: 'monthly' });
+    return frequency === 'accelerated-bi-weekly' ? monthlyPayment / 2 : monthlyPayment / 4;
   }
 
   const paymentsPerYear = getPaymentsPerYear(frequency);
-  const periodicRate = getPeriodicRate(annualRate, paymentsPerYear);
   const totalPayments = amortizationYears * paymentsPerYear;
+
+  // Handle zero interest rate edge case
+  if (annualRate === 0) {
+    return principal / totalPayments;
+  }
+
+  const periodicRate = getPeriodicRate(annualRate, paymentsPerYear);
 
   // Mortgage payment formula
   const numerator = periodicRate * Math.pow(1 + periodicRate, totalPayments);
   const denominator = Math.pow(1 + periodicRate, totalPayments) - 1;
 
-  const payment = principal * (numerator / denominator);
-
-  // Handle accelerated payments
-  if (frequency === 'accelerated-bi-weekly' || frequency === 'accelerated-weekly') {
-    // Accelerated means you pay the monthly amount divided by frequency
-    const monthlyPayment = calculatePayment({
-      ...params,
-      frequency: 'monthly'
-    });
-
-    if (frequency === 'accelerated-bi-weekly') {
-      return monthlyPayment / 2;
-    } else {
-      return monthlyPayment / 4;
-    }
-  }
-
-  return payment;
+  return principal * (numerator / denominator);
 }
 
 /**
@@ -105,24 +95,64 @@ export function convertToMonthlyPayment(
 }
 
 /**
- * Calculate total interest paid over the life of the mortgage
+ * Number of payments actually needed to retire `principal` with a fixed
+ * per-period `payment`. Equals amortizationYears * paymentsPerYear for regular
+ * frequencies, but is smaller for accelerated frequencies (which overpay and
+ * therefore finish early).
+ */
+export function calculateNumberOfPayments(
+  principal: number,
+  payment: number,
+  annualRate: number,
+  frequency: PaymentFrequency
+): number {
+  if (principal <= 0) return 0;
+  if (payment <= 0) return Infinity;
+  if (annualRate === 0) return principal / payment;
+
+  const periodicRate = getPeriodicRate(annualRate, getPaymentsPerYear(frequency));
+  const interestOnly = principal * periodicRate;
+  if (payment <= interestOnly) return Infinity;
+
+  return -Math.log(1 - interestOnly / payment) / Math.log(1 + periodicRate);
+}
+
+/**
+ * Calculate total interest paid over the life of the mortgage.
+ *
+ * `annualRate` is optional for backwards compatibility. When supplied, the
+ * real payoff length is used, so accelerated frequencies correctly show the
+ * interest they save instead of assuming a full amortization of overpayments.
  */
 export function calculateTotalInterest(
   principal: number,
   payment: number,
   frequency: PaymentFrequency,
-  amortizationYears: number
+  amortizationYears: number,
+  annualRate?: number
 ): number {
   const paymentsPerYear = getPaymentsPerYear(frequency);
-  const totalPayments = amortizationYears * paymentsPerYear;
+  const scheduledPayments = amortizationYears * paymentsPerYear;
+  const totalPayments =
+    annualRate === undefined
+      ? scheduledPayments
+      : Math.min(
+          scheduledPayments,
+          calculateNumberOfPayments(principal, payment, annualRate, frequency)
+        );
   const totalPaid = payment * totalPayments;
 
   return totalPaid - principal;
 }
 
 /**
- * Calculate maximum mortgage amount for a given payment
- * This is the inverse of calculatePayment
+ * Calculate the maximum principal whose payment, expressed as a MONTHLY
+ * equivalent (the basis used for GDS/TDS), equals `monthlyPayment`.
+ *
+ * This is the exact inverse of
+ *   convertToMonthlyPayment(calculatePayment({ principal, ... }), frequency)
+ * and works for every frequency (including accelerated ones and 0% rates)
+ * because the payment is linear in the principal.
  */
 export function calculateMaxMortgage(
   monthlyPayment: number,
@@ -130,19 +160,12 @@ export function calculateMaxMortgage(
   amortizationYears: number,
   frequency: PaymentFrequency = 'monthly'
 ): number {
-  if (annualRate === 0) {
-    const paymentsPerYear = getPaymentsPerYear(frequency);
-    const totalPayments = amortizationYears * paymentsPerYear;
-    return monthlyPayment * totalPayments;
-  }
+  if (monthlyPayment <= 0) return 0;
 
-  const paymentsPerYear = getPaymentsPerYear(frequency);
-  const periodicRate = getPeriodicRate(annualRate, paymentsPerYear);
-  const totalPayments = amortizationYears * paymentsPerYear;
+  const monthlyPaymentPerDollar = convertToMonthlyPayment(
+    calculatePayment({ principal: 1, annualRate, amortizationYears, frequency }),
+    frequency
+  );
 
-  // Rearrange payment formula to solve for principal
-  const numerator = Math.pow(1 + periodicRate, totalPayments) - 1;
-  const denominator = periodicRate * Math.pow(1 + periodicRate, totalPayments);
-
-  return monthlyPayment * (numerator / denominator);
+  return monthlyPayment / monthlyPaymentPerDollar;
 }

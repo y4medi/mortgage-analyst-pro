@@ -28,7 +28,11 @@ export function generateSensitivityAnalysis(
   const minRate = Math.max(0.1, baseRate - rangeAboveBelow);
   const maxRate = baseRate + rangeAboveBelow;
 
-  for (let rate = minRate; rate <= maxRate; rate += rateStep) {
+  // Iterate on an integer step count so floating-point drift
+  // (e.g. 0.1 + 0.25 + 0.25 ...) can't skip or duplicate the last point.
+  const steps = Math.floor((maxRate - minRate) / rateStep + 1e-9);
+  for (let i = 0; i <= steps; i++) {
+    const rate = Math.round((minRate + i * rateStep) * 1e6) / 1e6;
     const payment = calculatePayment({
       principal,
       annualRate: rate,
@@ -42,7 +46,8 @@ export function generateSensitivityAnalysis(
       principal,
       payment,
       frequency,
-      amortizationYears
+      amortizationYears,
+      rate
     );
 
     const totalCost = principal + totalInterest;
@@ -107,8 +112,10 @@ export function generateAmortizationSchedule(
     let principalPayment = roundedPayment - roundedInterest;
 
     // Adjust final payment to ensure balance = 0 exactly
-    // This prevents floating-point errors from leaving a small remaining balance
-    if (isLastPayment) {
+    // This prevents floating-point errors from leaving a small remaining balance.
+    // Accelerated frequencies pay the loan off early, so stop as soon as the
+    // regular payment would clear the remaining balance.
+    if (isLastPayment || principalPayment >= balance) {
       principalPayment = balance; // Pay remaining balance exactly
       const adjustedPayment = roundedInterest + principalPayment;
 
@@ -228,7 +235,8 @@ export function compareAmortizationPeriods(
       principal,
       payment,
       frequency,
-      years
+      years,
+      annualRate
     );
 
     return {
@@ -279,14 +287,16 @@ export function calculateRateBreakeven(
     principal,
     fixedPayment,
     frequency,
-    amortizationYears
+    amortizationYears,
+    fixedRate
   );
 
   const variableTotalInterest = calculateTotalInterest(
     principal,
     variablePayment,
     frequency,
-    amortizationYears
+    amortizationYears,
+    variableRate
   );
 
   const totalSavingsVariable = fixedTotalInterest - variableTotalInterest;
