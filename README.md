@@ -1,243 +1,132 @@
 # Mortgage Analyst Pro
 
-AI-Powered Mortgage Portfolio Dashboard for mortgage professionals featuring automated document processing, stress testing, and real-time decision-making analytics.
+[![CI](https://github.com/y4medi/mortgage-analyst-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/y4medi/mortgage-analyst-pro/actions/workflows/ci.yml)
+
+A broker-side workbench for Canadian residential mortgages. Paste an employment letter, pay stub or
+debt summary, and the app extracts income, debts and mortgage terms (Claude AI, or a deterministic
+parser in demo mode) and shows them with their source lines so a human can review them before they
+go into the calculator. The calculator then runs GDS/TDS affordability, the federal stress test, and
+maximum-mortgage calculations using Canadian rules. Clients and scenarios can be saved and reopened.
+It exists to show the end-to-end flow a mortgage-tech implementation has to get right: messy document
+in, auditable numbers out, with a person signing off in between.
+
+![Mortgage Analyst Pro dashboard in demo mode](docs/screenshot.png)
 
 ## Features
 
-### Core Calculations
-- **Affordability Analysis**: Calculate GDS/TDS ratios following Canadian mortgage guidelines
-- **Stress Testing**: Apply +2% qualifying rate as per Canadian regulations
-- **Sensitivity Analysis**: Visualize payment scenarios across different interest rates
-- **Amortization Schedules**: Generate detailed payment breakdowns
+- **AI document intake with human review**: extracts income, monthly debts, principal, rate and
+  amortization; shows confidence and source lines, and applies values only when the broker clicks
+  *Apply to calculator*.
+- **Affordability**: GDS and TDS with property tax, heating and 50% of condo fees.
+- **Qualification presets**: Conventional (32% / 40%) or CMHC insured (39% / 44%), selectable in
+  the form and threaded through every calculation.
+- **Stress test**: qualifying rate, pass/fail at that rate, and maximum mortgage at contract vs.
+  qualifying rate. The ratio that limits the amount (GDS or TDS) is reported.
+- **Payment frequencies**: monthly, semi-monthly, bi-weekly, weekly, accelerated bi-weekly/weekly.
+- **Charts** (Recharts): rate sensitivity, yearly amortization, and amortization-period comparison.
+- **Client book**: save clients and mortgages (PostgreSQL via Prisma, or the in-memory demo store).
+- **Runs with zero secrets**: a demo mode for public deployments (see below).
 
-### AI Document Processing
-- Automated extraction of income data from documents
-- Identification of debt obligations
-- Mortgage term detection using Claude AI
+## Canadian rules implemented
 
-### Interactive Visualizations
-- Interest rate sensitivity charts
-- Amortization schedule visualization
-- Period comparison charts
-- Real-time affordability indicators
+| Rule | Implementation (`lib/math/`) |
+|---|---|
+| Semi-annual compounding | periodic rate `i = (1 + r/2)^(2/n) − 1`, where `n` is payments per year |
+| Payment | `P = L · i(1+i)^N / ((1+i)^N − 1)`, with `N = years × n`. Check: $500,000 @ 5% / 25y monthly = **$2,908.02** |
+| Accelerated payments | accelerated bi-weekly = monthly / 2, accelerated weekly = monthly / 4 |
+| GDS | `(mortgage payment + property tax + heating + 50% condo fees) / gross monthly income` |
+| TDS | `(GDS housing costs + other monthly debts) / gross monthly income` |
+| Ratio limits | Conventional 32 / 40, CMHC insured 39 / 44 (`QUALIFICATION_PRESETS`) |
+| Stress test (MQR) | qualify at `max(contract rate + 2%, 5.25%)`: OSFI B-20 for uninsured loans, federal MQR for insured loans. The floor is one constant, `MINIMUM_QUALIFYING_RATE` |
+| Maximum mortgage | monthly budget = `min(GDS% · income, TDS% · income − debts) − (tax + heat + 50% condo)`, inverted back to principal for the chosen frequency |
 
-## Tech Stack
+The math is pure TypeScript with no framework dependencies and is covered by unit tests.
+`docs/precision-analysis.md` covers floating-point and rounding choices.
 
-- **Framework**: Next.js 15 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Database**: SQLite with Prisma ORM
-- **Charts**: Recharts
-- **AI**: Anthropic Claude API
+## Architecture
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd mortgage-analyst-pro
+```
+app/
+  page.tsx                      Dashboard (client component)
+  actions/saveCalculation.ts    Server action: upsert client + save mortgage
+  api/clients, api/mortgages    REST route handlers
+  api/ai/analyze-document       Claude extraction, or rule-based in demo mode
+  api/status                    Reports demo/live mode (booleans only, no secrets)
+components/                     Form, results, AI panel, client sidebar, charts
+lib/math/                       Payment, affordability, stress test, sensitivity (pure functions)
+lib/data/repository.ts          Repository interface: Prisma/PostgreSQL or in-memory store
+lib/data/demo-seed.ts           Synthetic borrowers for demo mode
+lib/runtime-mode.ts             Detects which backends are configured
+services/ai/                    Claude client (document-analyzer) + rule-based extractor
+public/samples/                 Synthetic sample documents
+__tests__/                      Jest unit tests
 ```
 
-2. Install dependencies:
+```
+ document text ──► /api/ai/analyze-document ──► Claude (key set) │ regex rules (demo)
+                                                     │
+                              broker reviews values + source lines, clicks "Apply"
+                                                     ▼
+ calculator form ──► lib/math (GDS/TDS, stress test, max mortgage, charts)
+        │
+        └──► saveCalculation / API routes ──► repository ──► PostgreSQL │ in-memory
+```
+
+## Demo mode
+
+A public deployment should work for anyone who opens the link, so neither secret is required:
+
+| Missing variable | Fallback |
+|---|---|
+| `DATABASE_URL` | In-memory repository seeded with four clearly fictional borrowers ("Sample Borrower A–D", `@example.com`, 555-01xx numbers). Writes work but reset when the server restarts or a serverless instance is recycled. |
+| `ANTHROPIC_API_KEY` | Deterministic regex extraction (income, pay-frequency-annualised pay stubs, debt payments, rate, amortization, principal). Responses are flagged `mode: "demo"` and include the matched line for each value. |
+
+When either fallback is active, the header shows a small **Demo mode — synthetic data** badge. Use
+*Load sample document* in the AI panel to try the three synthetic documents in `public/samples/`.
+
+## Running locally
+
 ```bash
 npm install
+npm run dev            # http://localhost:3000, demo mode if no .env
 ```
 
-3. Set up environment variables:
+To use PostgreSQL and Claude, copy `.env.example` to `.env` and set either or both variables:
+
 ```bash
-cp .env.example .env
+DATABASE_URL="postgresql://..."      # then: npx prisma migrate deploy (or prisma db push)
+ANTHROPIC_API_KEY="sk-ant-..."
+# ANTHROPIC_MODEL="claude-sonnet-5-5"  # optional override
 ```
 
-Edit `.env` and add your Anthropic API key:
-```
-ANTHROPIC_API_KEY=your_api_key_here
-DATABASE_URL="file:./dev.db"
-```
+## Tests and CI
 
-4. Initialize the database:
 ```bash
-npx prisma migrate dev
-```
-
-5. Run the development server:
-```bash
-npm run dev
-```
-
-6. Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## Project Structure
-
-```
-mortgage-analyst-pro/
-├── app/                          # Next.js app directory
-│   ├── api/                     # API routes
-│   │   └── ai/                  # AI document processing endpoints
-│   ├── globals.css              # Global styles
-│   ├── layout.tsx               # Root layout
-│   └── page.tsx                 # Main dashboard page
-├── components/                   # React components
-│   ├── charts/                  # Recharts visualization components
-│   ├── dashboard/               # Dashboard display components
-│   └── forms/                   # Form components
-├── lib/                         # Utility libraries
-│   ├── math/                    # Mortgage calculation engine
-│   │   ├── affordability.ts     # GDS/TDS calculations
-│   │   ├── payment.ts           # Payment calculations
-│   │   ├── sensitivity.ts       # Sensitivity analysis
-│   │   └── stress-test.ts       # Stress testing
-│   └── generated/               # Generated Prisma client
-├── services/                    # External services
-│   └── ai/                      # AI integration
-│       └── document-analyzer.ts # Claude document processing
-├── types/                       # TypeScript type definitions
-│   └── index.ts                 # Shared types
-├── prisma/                      # Database schema and migrations
-│   ├── schema.prisma            # Prisma schema
-│   └── dev.db                   # SQLite database
-└── public/                      # Static assets
-
-```
-
-## Key Calculations
-
-### GDS Ratio (Gross Debt Service)
-```
-GDS = (Monthly Housing Costs / Gross Monthly Income) × 100
-Threshold: ≤ 32%
-```
-
-### TDS Ratio (Total Debt Service)
-```
-TDS = (Total Monthly Debt / Gross Monthly Income) × 100
-Threshold: ≤ 40%
-```
-
-### Stress Test Rate
-```
-Qualifying Rate = max(Contract Rate + 2%, 5.25%)
-```
-
-### Payment Calculation
-Canadian mortgages use semi-annual compounding:
-```
-Periodic Rate = (1 + Annual Rate / 2)^(2 / Payments Per Year) - 1
-Payment = Principal × [r(1+r)^n] / [(1+r)^n - 1]
-```
-
-## API Routes
-
-### POST /api/ai/analyze-document
-Analyze a document using Claude AI to extract mortgage-relevant information.
-
-**Request Body:**
-```json
-{
-  "documentText": "string"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "extractedIncome": 80000,
-    "extractedDebts": [500, 300],
-    "identifiedMortgageTerms": {
-      "principal": 400000,
-      "rate": 5.5,
-      "amortization": 25
-    },
-    "confidence": 0.85,
-    "rawText": "..."
-  }
-}
-```
-
-## Database Schema
-
-### Client Model
-- `id`: Unique identifier
-- `name`: Client name
-- `email`: Email address (unique)
-- `phone`: Phone number
-- `grossAnnualIncome`: Annual income
-- `monthlyDebts`: Total monthly debt obligations
-- `createdAt`: Creation timestamp
-- `updatedAt`: Last update timestamp
-
-### Mortgage Model
-- `id`: Unique identifier
-- `clientId`: Reference to Client
-- `principal`: Mortgage amount
-- `interestRate`: Annual interest rate (%)
-- `amortizationYears`: Amortization period
-- `paymentFrequency`: Payment frequency
-- `mortgageType`: fixed, variable, or mixed
-- `createdAt`: Creation timestamp
-- `updatedAt`: Last update timestamp
-
-## Development
-
-### Build
-```bash
+npm test               # Jest unit tests (math engine, demo repository, rule-based extractor)
+npx tsc --noEmit       # type check
+npm run lint
 npm run build
 ```
 
-### Lint
-```bash
-npm run lint
-```
+GitHub Actions (`.github/workflows/ci.yml`) runs install, Prisma generate, lint, type check, tests
+and build on every push and pull request. CI needs no secrets.
 
-### Database Commands
-```bash
-# Create a migration
-npx prisma migrate dev --name migration_name
+## Limitations
 
-# Reset database
-npx prisma migrate reset
+- **Not lender advice.** The ratios and stress test follow published federal and CMHC guidelines.
+  Real lenders and insurers add their own policies (credit-score tiers, rental offsets,
+  self-employed income, heating defaults, the 30-year insured amortization rules, and so on). Do
+  not use the output to make a credit decision.
+- **Synthetic data only.** Demo borrowers and sample documents are fictional. Do not upload real
+  personal financial information to a public demo.
+- The rule-based extractor is intentionally simple and only recognises common phrasings. Claude
+  output can also be wrong. That is why extracted values always go through human review.
+- Property tax, heating, condo fees and the qualification preset are not saved yet. The Prisma
+  schema only stores client income/debts and mortgage terms.
+- No authentication or multi-tenant isolation. It is a portfolio project, not a production system.
 
-# Open Prisma Studio
-npx prisma studio
-```
+## More docs
 
-## Canadian Mortgage Guidelines
-
-This application follows CMHC (Canada Mortgage and Housing Corporation) guidelines:
-
-1. **GDS Ratio**: Maximum 32% of gross income for housing costs
-2. **TDS Ratio**: Maximum 40% of gross income for total debt
-3. **Stress Test**: Borrowers must qualify at the higher of:
-   - Contract rate + 2%
-   - 5.25% minimum qualifying rate
-4. **Semi-Annual Compounding**: Canadian mortgages compound semi-annually, not monthly
-
-## License
-
-This project is for educational and professional use.
-
-## Contributing
-
-Contributions are welcome! Please follow these steps:
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes (follow Conventional Commits)
-4. Push to your branch
-5. Open a Pull Request
-
-## Support
-
-For issues or questions, please open an issue on the GitHub repository.
-
----
-
-Built with Claude Sonnet 4.5
+- `docs/precision-analysis.md`: floating-point and rounding analysis
+- `docs/architecture-notes.zh.md`: original architecture notes (Chinese)
+- `docs/original-plan.md`: initial build plan (historical)

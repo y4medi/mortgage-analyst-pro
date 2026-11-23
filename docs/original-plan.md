@@ -1,3 +1,6 @@
+> **Historical planning document.** This was the initial build plan; its checkboxes were never
+> updated and do not reflect project status. See the [README](../README.md) for what is implemented.
+
 # AI-Powered Mortgage Portfolio Dashboard - Implementation Plan
 
 ## Project Overview
