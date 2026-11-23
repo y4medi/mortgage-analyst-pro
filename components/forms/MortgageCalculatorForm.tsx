@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { PaymentFrequency } from '@/types';
+import type { PaymentFrequency, QualificationPreset } from '@/types';
+import { QUALIFICATION_PRESETS } from '@/lib/math';
 
 export interface MortgageFormData {
   principal: number;
@@ -10,6 +11,10 @@ export interface MortgageFormData {
   frequency: PaymentFrequency;
   grossAnnualIncome: number;
   monthlyDebts: number;
+  propertyTax: number; // monthly
+  heatingCost: number; // monthly
+  condoFees: number; // monthly (50% counts toward GDS/TDS)
+  qualificationPreset: QualificationPreset;
 }
 
 interface Props {
@@ -23,7 +28,11 @@ const DEFAULT_FORM_DATA: MortgageFormData = {
   amortizationYears: 25,
   frequency: 'monthly',
   grossAnnualIncome: 80000,
-  monthlyDebts: 500
+  monthlyDebts: 500,
+  propertyTax: 300,
+  heatingCost: 100,
+  condoFees: 0,
+  qualificationPreset: 'conventional'
 };
 
 function toFiniteNumber(value: string): number {
@@ -165,6 +174,67 @@ export default function MortgageCalculatorForm({ onCalculate, prefillData }: Pro
             step="0.01"
             required
           />
+        </div>
+
+        {/* Other housing costs (counted in GDS/TDS) */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Property Tax ($/month)
+          </label>
+          <input
+            type="number"
+            value={formData.propertyTax}
+            onChange={(e) => handleChange('propertyTax', toFiniteNumber(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            min="0"
+            step="0.01"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Heating ($/month)
+          </label>
+          <input
+            type="number"
+            value={formData.heatingCost}
+            onChange={(e) => handleChange('heatingCost', toFiniteNumber(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            min="0"
+            step="0.01"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Condo Fees ($/month, 50% counted)
+          </label>
+          <input
+            type="number"
+            value={formData.condoFees}
+            onChange={(e) => handleChange('condoFees', toFiniteNumber(e.target.value))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            min="0"
+            step="0.01"
+          />
+        </div>
+
+        {/* Qualification rules */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Qualification Rules
+          </label>
+          <select
+            value={formData.qualificationPreset}
+            onChange={(e) => handleChange('qualificationPreset', e.target.value as QualificationPreset)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {(Object.keys(QUALIFICATION_PRESETS) as QualificationPreset[]).map((key) => (
+              <option key={key} value={key}>
+                {QUALIFICATION_PRESETS[key].label} (GDS {QUALIFICATION_PRESETS[key].gdsThreshold}% / TDS {QUALIFICATION_PRESETS[key].tdsThreshold}%)
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

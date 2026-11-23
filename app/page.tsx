@@ -12,6 +12,7 @@ import {
   calculateAffordability,
   performStressTest,
   generateSensitivityAnalysis,
+  getQualificationThresholds,
   generateYearlyAmortizationSummary,
   compareAmortizationPeriods
 } from '@/lib/math';
@@ -31,7 +32,7 @@ export default function Home() {
     sensitivityData: SensitivityDataPoint[];
     amortizationData: any[];
     comparisonData: any[];
-    formData: any;
+    formData: MortgageFormData;
   } | null>(null);
 
   const [clientInfo, setClientInfo] = useState({
@@ -40,7 +41,7 @@ export default function Home() {
     phone: ''
   });
 
-  const [currentFormData, setCurrentFormData] = useState<any>(null);
+  const [currentFormData, setCurrentFormData] = useState<MortgageFormData | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [refreshClients, setRefreshClients] = useState(0);
@@ -73,14 +74,9 @@ export default function Home() {
     }
   };
 
-  const handleCalculate = (formData: {
-    principal: number;
-    interestRate: number;
-    amortizationYears: number;
-    frequency: PaymentFrequency;
-    grossAnnualIncome: number;
-    monthlyDebts: number;
-  }) => {
+  const handleCalculate = (formData: MortgageFormData) => {
+    const thresholds = getQualificationThresholds(formData.qualificationPreset);
+
     // Store form data for later save
     setCurrentFormData(formData);
 
@@ -91,7 +87,12 @@ export default function Home() {
       formData.amortizationYears,
       formData.frequency,
       formData.grossAnnualIncome,
-      formData.monthlyDebts
+      formData.monthlyDebts,
+      formData.propertyTax,
+      formData.heatingCost,
+      formData.condoFees,
+      thresholds.gdsThreshold,
+      thresholds.tdsThreshold
     );
 
     // Perform stress test
@@ -101,7 +102,12 @@ export default function Home() {
       formData.amortizationYears,
       formData.frequency,
       formData.grossAnnualIncome,
-      formData.monthlyDebts
+      formData.monthlyDebts,
+      formData.propertyTax,
+      formData.heatingCost,
+      formData.condoFees,
+      thresholds.gdsThreshold,
+      thresholds.tdsThreshold
     );
 
     // Generate sensitivity analysis data
@@ -203,7 +209,12 @@ export default function Home() {
         amortizationYears: mortgage.amortizationYears,
         frequency: mortgage.paymentFrequency as PaymentFrequency,
         grossAnnualIncome: client.grossAnnualIncome,
-        monthlyDebts: client.monthlyDebts
+        monthlyDebts: client.monthlyDebts,
+        // Housing costs and preset are not persisted; use neutral defaults
+        propertyTax: 0,
+        heatingCost: 0,
+        condoFees: 0,
+        qualificationPreset: 'conventional'
       });
     }
   };
@@ -279,6 +290,7 @@ export default function Home() {
                 <AffordabilityResults
                   affordability={results.affordability}
                   stressTest={results.stressTest}
+                  presetLabel={getQualificationThresholds(results.formData.qualificationPreset).label}
                 />
 
                 {/* Save to Database Button */}

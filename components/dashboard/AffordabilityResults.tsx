@@ -1,18 +1,27 @@
 'use client';
 
 import type { AffordabilityResult, StressTestResult } from '@/types';
+import { MINIMUM_QUALIFYING_RATE, STRESS_TEST_RATE_INCREASE } from '@/lib/math';
 
 interface Props {
   affordability: AffordabilityResult;
   stressTest: StressTestResult;
+  presetLabel?: string;
 }
 
-export default function AffordabilityResults({ affordability, stressTest }: Props) {
+export default function AffordabilityResults({ affordability, stressTest, presetLabel }: Props) {
   return (
     <div className="space-y-6">
       {/* Affordability Summary */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4">Affordability Analysis</h2>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl font-bold text-gray-800">Affordability Analysis</h2>
+          {presetLabel && (
+            <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+              {presetLabel} rules: GDS {affordability.gdsThreshold}% / TDS {affordability.tdsThreshold}%
+            </span>
+          )}
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* GDS Ratio */}
@@ -123,7 +132,9 @@ export default function AffordabilityResults({ affordability, stressTest }: Prop
           </div>
 
           <div>
-            <p className="text-sm text-gray-600 mb-1">Stress Test Rate (+2%)</p>
+            <p className="text-sm text-gray-600 mb-1">
+              Qualifying Rate (greater of +{STRESS_TEST_RATE_INCREASE}% or {MINIMUM_QUALIFYING_RATE}%)
+            </p>
             <p className="text-xl font-bold text-gray-900">{stressTest.stressRate}%</p>
             <p className="text-sm text-gray-600 mt-2">Monthly Payment</p>
             <p className="text-2xl font-bold text-orange-600">
@@ -144,6 +155,11 @@ export default function AffordabilityResults({ affordability, stressTest }: Prop
               <p className="text-sm text-gray-600">Max at Stress Rate</p>
               <p className="text-xl font-semibold text-gray-900">
                 ${stressTest.maxMortgageAtStress.toLocaleString()}
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Limited by {stressTest.bindingConstraint} ({stressTest.bindingConstraint === 'GDS'
+                  ? affordability.gdsThreshold
+                  : affordability.tdsThreshold}%)
               </p>
             </div>
           </div>
