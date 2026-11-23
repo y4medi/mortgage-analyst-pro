@@ -5,6 +5,7 @@ import MortgageCalculatorForm, { type MortgageFormData } from '@/components/form
 import AffordabilityResults from '@/components/dashboard/AffordabilityResults';
 import AIPanel from '@/components/dashboard/AIPanel';
 import ClientSidebar from '@/components/dashboard/ClientSidebar';
+import DemoModeBadge from '@/components/dashboard/DemoModeBadge';
 import SensitivityChart from '@/components/charts/SensitivityChart';
 import AmortizationChart from '@/components/charts/AmortizationChart';
 import AmortizationComparisonChart from '@/components/charts/AmortizationComparisonChart';
@@ -172,7 +173,9 @@ export default function Home() {
       if (result.success) {
         setSaveMessage({
           type: 'success',
-          text: 'Calculation saved successfully!'
+          text: result.mode === 'demo'
+            ? 'Calculation saved to the in-memory demo store (not persisted).'
+            : 'Calculation saved successfully!'
         });
         setRefreshClients(prev => prev + 1);
         // Clear form after 2 seconds
@@ -223,9 +226,12 @@ export default function Home() {
     <main className="min-h-screen p-8 bg-gradient-to-br from-blue-50 to-indigo-50">
       <div className="max-w-7xl mx-auto">
         <header className="mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-2">
-            Mortgage Analyst Pro
-          </h1>
+          <div className="flex flex-wrap items-center gap-3 mb-2">
+            <h1 className="text-4xl font-bold text-gray-900">
+              Mortgage Analyst Pro
+            </h1>
+            <DemoModeBadge />
+          </div>
           <p className="text-lg text-gray-600">
             AI-Powered Mortgage Portfolio Dashboard
           </p>

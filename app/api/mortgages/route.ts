@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { getRepository } from '@/lib/data/repository';
 
-const prisma = new PrismaClient();
+// Never prerender at build time: the data source is chosen at runtime.
+export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/mortgages
@@ -41,10 +42,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const repo = getRepository();
+
     // Check if client exists
-    const client = await prisma.client.findUnique({
-      where: { id: clientId }
-    });
+    const client = await repo.findClientById(clientId);
 
     if (!client) {
       return NextResponse.json(
@@ -54,22 +55,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Create mortgage
-    const mortgage = await prisma.mortgage.create({
-      data: {
-        clientId,
-        principal,
-        interestRate,
-        amortizationYears: amortizationYears || 25,
-        paymentFrequency: paymentFrequency || 'monthly',
-        mortgageType: mortgageType || 'fixed'
-      },
-      include: {
-        client: true
-      }
+    const mortgage = await repo.createMortgage({
+      clientId,
+      principal,
+      interestRate,
+      amortizationYears: amortizationYears || 25,
+      paymentFrequency: paymentFrequency || 'monthly',
+      mortgageType: mortgageType || 'fixed'
     });
 
     return NextResponse.json({
       success: true,
+      mode: repo.mode,
       data: mortgage
     }, { status: 201 });
 
@@ -94,18 +91,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const clientId = searchParams.get('clientId');
 
-    const mortgages = await prisma.mortgage.findMany({
-      where: clientId ? { clientId } : undefined,
-      include: {
-        client: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+    const repo = getRepository();
+    const mortgages = await repo.listMortgages(clientId ?? undefined);
 
     return NextResponse.json({
       success: true,
+      mode: repo.mode,
       data: mortgages
     });
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { getRepository } from '@/lib/data/repository';
 
-const prisma = new PrismaClient();
+// Never prerender at build time: the data source is chosen at runtime.
+export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/clients
@@ -9,17 +10,12 @@ const prisma = new PrismaClient();
  */
 export async function GET() {
   try {
-    const clients = await prisma.client.findMany({
-      include: {
-        mortgages: true
-      },
-      orderBy: {
-        createdAt: 'desc'
-      }
-    });
+    const repo = getRepository();
+    const clients = await repo.listClients();
 
     return NextResponse.json({
       success: true,
+      mode: repo.mode,
       data: clients
     });
   } catch (error) {
@@ -65,10 +61,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const repo = getRepository();
+
     // Check if email already exists
-    const existingClient = await prisma.client.findUnique({
-      where: { email }
-    });
+    const existingClient = await repo.findClientByEmail(email);
 
     if (existingClient) {
       return NextResponse.json(
@@ -78,18 +74,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Create client
-    const client = await prisma.client.create({
-      data: {
-        name,
-        email,
-        phone: phone || '',
-        grossAnnualIncome,
-        monthlyDebts
-      }
+    const client = await repo.createClient({
+      name,
+      email,
+      phone: phone || '',
+      grossAnnualIncome,
+      monthlyDebts
     });
 
     return NextResponse.json({
       success: true,
+      mode: repo.mode,
       data: client
     }, { status: 201 });
 
@@ -121,10 +116,10 @@ export async function PUT(request: NextRequest) {
       );
     }
 
+    const repo = getRepository();
+
     // Check if client exists
-    const existingClient = await prisma.client.findUnique({
-      where: { id }
-    });
+    const existingClient = await repo.findClientById(id);
 
     if (!existingClient) {
       return NextResponse.json(
@@ -134,19 +129,17 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update client
-    const updatedClient = await prisma.client.update({
-      where: { id },
-      data: {
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(phone !== undefined && { phone }),
-        ...(grossAnnualIncome !== undefined && { grossAnnualIncome }),
-        ...(monthlyDebts !== undefined && { monthlyDebts })
-      }
+    const updatedClient = await repo.updateClient(id, {
+      ...(name && { name }),
+      ...(email && { email }),
+      ...(phone !== undefined && { phone }),
+      ...(grossAnnualIncome !== undefined && { grossAnnualIncome }),
+      ...(monthlyDebts !== undefined && { monthlyDebts })
     });
 
     return NextResponse.json({
       success: true,
+      mode: repo.mode,
       data: updatedClient
     });
 
@@ -178,10 +171,10 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const repo = getRepository();
+
     // Check if client exists
-    const existingClient = await prisma.client.findUnique({
-      where: { id }
-    });
+    const existingClient = await repo.findClientById(id);
 
     if (!existingClient) {
       return NextResponse.json(
@@ -190,10 +183,8 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Delete client (will cascade delete mortgages due to schema)
-    await prisma.client.delete({
-      where: { id }
-    });
+    // Delete client (mortgages are deleted with it)
+    await repo.deleteClient(id);
 
     return NextResponse.json({
       success: true,
