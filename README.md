@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/y4medi/mortgage-analyst-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/y4medi/mortgage-analyst-pro/actions/workflows/ci.yml)
 
+**Live demo:** https://mortgage-analyst-pro.vercel.app (demo mode: synthetic borrowers and sample documents, no database or API key)
+
 A broker-side workbench for Canadian residential mortgages. Paste an employment letter, pay stub or
 debt summary, and the app extracts income, debts and mortgage terms (Claude AI, or a deterministic
 parser in demo mode) and shows them with their source lines so a human can review them before they
